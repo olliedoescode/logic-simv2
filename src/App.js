@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import uniqueId from 'lodash/uniqueId';
 import Xarrow, {cPaths, useXarrow, Xwrapper} from 'react-xarrows';
-import Draggable, { DraggableCore } from 'react-draggable';
+import Draggable from 'react-draggable';
 import './App.css';
 
 const NameForm = ({name, setName}) => {
@@ -90,13 +90,23 @@ const InputBar = ({inputs, setInputs, setWires, setPinHover, handleMouseDownOnPi
   );
 };
 
-const MainGrid = ({draggedPinActive, x, y, gates, handleMouseDownOnPin, setPinHover, wires, deleteWire}) => {
+const MainGrid = ({draggedPinActive, setMouseOverGrid, x, y, gates, setGateHover, handleMouseDownOnPin, setPinHover, wires, deleteWire}) => {
+
+  const handleMouseEnter = (e) => {
+    e.preventDefault();
+    setMouseOverGrid(true);
+  };
+
+  const handleMouseLeave = (e) => {
+    e.preventDefault();
+    setMouseOverGrid(false);
+  };
 
   return (
-  <div style={{width: "90%", height: "100%", outline: "1px solid grey", outlineOffset: "-1px"}}>
+  <div onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} style={{width: "90%", height: "100%", outline: "1px solid grey", outlineOffset: "-1px"}}>
     <DraggedPin id={"dragged-pin"} active={draggedPinActive} xOffset={x - 7} yOffset={y- 7}/>
     {gates.map(gate=>(
-      <Gate id={gate.id} name={gate.name} pins={gate.pins} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/>
+      <Gate id={gate.id} name={gate.name} pins={gate.pins} handleMouseDownOnPin={handleMouseDownOnPin} setGateHover={setGateHover} setPinHover={setPinHover} xOffset={gate.xOffset} yOffset={gate.yOffset}/>
     ))}
     {wires.map(wire=>(
       <Wire id={wire.id} start={wire.start} end={wire.end} deleteWire={deleteWire}/>
@@ -104,7 +114,6 @@ const MainGrid = ({draggedPinActive, x, y, gates, handleMouseDownOnPin, setPinHo
   </div>
   );
 };
-
 
 const Output = ({id, pinId, deleteOutput, setPinHover, handleMouseDownOnPin}) => {
   const [isHover, setIsHover] = useState(false);
@@ -236,19 +245,28 @@ const DraggedPin = ({ id, active, xOffset, yOffset }) => {
   );
 };
 
-const Gate = ({ id, name, pins, handleMouseDownOnPin, setPinHover }) => {
+const Gate = ({ id, name, pins, handleMouseDownOnPin, setGateHover, setPinHover, xOffset, yOffset }) => {
   const updateXarrow = useXarrow();
   const [disabled, setDisabled] = useState(false);
+  
+  const handleMouseEnter = () => {
+    setGateHover({id: id});
+    updateXarrow();
+  };
+
+  const handleMouseLeave = () => {
+    setGateHover({id: null})
+  }
 
   return (
-    <Draggable disabled={disabled} onDrag={updateXarrow}>
-      <div id={id} style={{position: "relative", display: "flex", flexDirection: "row", border: "grey solid 2px", borderRadius: "10px", padding: "5px", maxWidth: "60px", backgroundColor: "transparent",fontSize: "medium", zIndex: "2"}}>
+    <Draggable disabled={disabled} onDrag={()=>{setGateHover({id: id})}} onStop={()=>{setGateHover({id: null})}}>
+      <div id={id} style={{position: "fixed", top: yOffset, left: xOffset, display: "flex", flexDirection: "row", border: "grey solid 2px", borderRadius: "10px", padding: "5px", backgroundColor: "transparent",fontSize: "medium", zIndex: "2"}}>
         <div style={{position: "relative", left: "-12px", display: "flex", flexDirection: "column", justifyContent: "center"}}>
           {pins.map(pin=>(
             pin.pinType === "input" ? <Pin id={pin.id} pinType={"input"} parentGate={id} setDisabled={setDisabled} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/> : null
           ))}
         </div>
-        {name}
+        <div style={{width: "100%", height: "100x"}}>{name}</div>
         <div style={{position: "relative", left: "12px", display: "flex", flexDirection: "column", justifyContent: "center"}}>
           {pins.map(pin=>(
             pin.pinType === "output" ? <Pin id={pin.id} pinType={"output"} parentGate={id} setDisabled={setDisabled} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/> : null
@@ -259,13 +277,31 @@ const Gate = ({ id, name, pins, handleMouseDownOnPin, setPinHover }) => {
   );
 };
 
+const DraggedGate = ({id, name, pins, xOffset, yOffset}) => {
+  return (
+    <div id={id} style={{position: "fixed", top: yOffset, left: xOffset, display: "flex", flexDirection: "row", border: "grey solid 2px", borderRadius: "10px", padding: "5px", backgroundColor: "transparent",fontSize: "medium", zIndex: "5"}}>
+      <div style={{position: "relative", left: "-12px", display: "flex", flexDirection: "column", justifyContent: "center"}}>
+        {pins.map(pin=>(
+          pin.pinType === "input" ? <Pin id={pin.id} pinType={"input"}/> : null
+        ))}
+      </div>
+      <div style={{width: "100%", height: "100x"}}>{name}</div>
+      <div style={{position: "relative", left: "12px", display: "flex", flexDirection: "column", justifyContent: "center"}}>
+        {pins.map(pin=>(
+          pin.pinType === "output" ? <Pin id={pin.id} pinType={"output"}/> : null
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const Wire = ({ id, start, end, deleteWire }) => {
   const [deleteButtonText, setDeleteButtonText] = useState("");
   const [deleteButtonStyle, setDeleteButtonStyle] = useState({})
   const handleMouseEnter = (e) => {
     e.preventDefault();
-    setDeleteButtonText("")
-    setDeleteButtonStyle({position: "relative", fontSize: "x-large", padding: "10px",border: "2px solid grey", borderRadius: "15px", cursor: "pointer", overflow: "hidden"})
+    setDeleteButtonText("x")
+    setDeleteButtonStyle({position: "relative", fontSize: "xx-large", padding: "10px", borderRadius: "15px", color: "red", cursor: "pointer", overflow: "hidden"})
   };
 
   const handleMouseLeave = (e) => {
@@ -296,15 +332,18 @@ export default function App() {
   const [gateListID, setGateListID] = useState(2);
   const [gates, setGates] = useState([]);
   const [wires, setWires] = useState([]);
-  const [draggedGate, setDraggedGate] = useState({isTrue: false, })
+  const [draggedGate, setDraggedGate] = useState({isTrue: false, id: null, name: null, pins: null})
+  const [mouseOverGrid, setMouseOverGrid] = useState(false);
   const [draggedPinActive, setDraggedPinActive] = useState(false);
   const [pinHover, setPinHover] = useState({isTrue: false, pinId: null, pinType: null, parentGate: null});
   const [startPin, setStartPin] = useState({pinId: null, pinType: null, parentGate: null});
+  const [gateHover, setGateHover] = useState({id: null});
+  const [binHover, setBinHover] = useState(false);
+  const [delayedGateHover, setDelayedGateHover] = useState({id: null})
 
   useEffect(
     () => {
       setGateList([{id: "0", name: "AND", inputs: 2, outputs: 1}, {id: "1", name: "NOT", inputs: 1, outputs: 1}])
-      setGates([{id: uniqueId(), name: "AND", pins: generatePins(2, 1)}, {id: uniqueId(), name: "NOT", pins: generatePins(1, 1)}])
     }, []
   );
   
@@ -332,9 +371,39 @@ export default function App() {
 
   useEffect(
     () => {
+      console.log("draggedGate chaged, new draggedGate: ", draggedGate);
+    }, [draggedGate, setDraggedGate]
+  );
+
+  useEffect(
+    () => {
+      console.log("gates changed, new gates: ", gates);
+    }, [gates, setGates]
+  );
+
+  useEffect(
+    () => {
       console.log("pinHover changed, new pinHover: ", pinHover);
     }, [pinHover, setPinHover]
   );
+
+  useEffect(
+    () => {
+      console.log("binHover changed, new binHover: ", binHover);
+    }, [binHover, setBinHover]
+  );
+
+  useEffect(
+    () => {
+      console.log("gateHover changed, new binHover: ", gateHover);
+    }, [gateHover, setGateHover]
+  );
+
+  useEffect(
+    () => {
+      setDelayedGateHover(gateHover);
+    }, [gateHover, setGateHover]
+  )
 
   const generatePins = (inputs, outputs) => {
     var newPins = [];
@@ -349,13 +418,16 @@ export default function App() {
 
   const groupGate = () => {
     if (name === "") {
-      console.log("invalid gate: no name")
+      console.log("invalid gate: no name");
     } else if (false){
       // test for pins
     } else {
       setGateList([...gateList, {id: gateListID, name: name, inputs: inputs.length, outputs: outputs.length}]);
       setGateListID(gateListID + 1); 
       console.log("new gate created, name: ", name, " id: ", gateListID);
+      setGates([]);
+      setInputs([]);
+      setOutputs([]);
     };
   };
 
@@ -364,8 +436,8 @@ export default function App() {
     console.log(gateList[id].name);
     console.log(gateList[id].inputs);
     console.log(gateList[id].outputs);
-    setGates([...gates, {id: uniqueId(), name: gateList[id].name, pins: generatePins(gateList[id].inputs, gateList[id].outputs)}]);
-  };
+    setDraggedGate({isTrue: true, name: gateList[id].name , pins: generatePins(gateList[id].inputs, gateList[id].outputs)});
+  }; 
 
   const handleMouseDownOnPin = (id, pinType, parentGate) => {
     setDraggedPinActive(true);
@@ -392,6 +464,17 @@ export default function App() {
       setStartPin({pinId: null, pinType: null, parentGate: null});
     };
     setDraggedPinActive(false);
+    if (draggedGate.isTrue && mouseOverGrid) {
+      console.log(draggedGate.pins);
+      const xOff = x;
+      const yOff = y;
+      setGates([...gates, {id: uniqueId(), name: draggedGate.name, pins: draggedGate.pins, xOffset: xOff, yOffset: yOff}]);
+    };
+    setDraggedGate({isTrue: false, id: null, name: null, pins: null});
+    if (binHover) {
+      console.log("Works")
+      setGates(gates=>gates.filter(gate=>gate.id !== delayedGateHover.id));
+    };
   };
 
   const tryConnection = () => {
@@ -462,22 +545,15 @@ export default function App() {
         <div style={{display: "flex", flexDirection: "row", width: "100%", height: "80%"}}>
           <Xwrapper>
             <InputBar inputs={inputs} setInputs={setInputs} setWires={setWires} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin}/>
-            <MainGrid draggedPinActive={draggedPinActive} x={x} y={y} gates={gates} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover} wires={wires} deleteWire={deleteWire} />
+            <MainGrid draggedPinActive={draggedPinActive} setMouseOverGrid={setMouseOverGrid} x={x} y={y} gates={gates} setGateHover={setGateHover} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover} wires={wires} deleteWire={deleteWire} />
             <OutputBar outputs={outputs} setOutputs={setOutputs} setWires={setWires} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin}/>
           </Xwrapper>
         </div>
         <BottomBar gateList={gateList} handleMouseDownOnGate={handleMouseDownOnGate}/>
-        {/* <div style={{position: "fixed", top: "0px", display: "flex", flexDirection: "column", padding: "3px", border: "2px solid grey", borderRadius: "10px"}}>
-          
-          <div style={{display: "flex", flexDireciton: "row"}}>
-            <UpDownCounter count={inputCounter} setCount={setInputCounter}/>
-            <UpDownCounter count={outputCounter} setCount={setOutputCounter}/>
-            <button onClick={addGate} style={{border: "2px solid grey", borderRadius: "5px", backgroundColor: "transparent", color: "white"}}>click</button>
-          </div>
+        <div onMouseEnter={()=>setBinHover(true)} onMouseLeave={()=>{setBinHover(false)}} style={{position: "fixed", top: "88%", left: "88%", width: "12%", height: "12%", border: "2px solid red" , zIndex: "6"}}>
+          <img src={require('./recycle-bin2.png').default}></img>
         </div>
-        <Xwrapper>
-          
-        </Xwrapper> */}
+        {draggedGate.isTrue ? <DraggedGate id={"dragged-gate"} name={draggedGate.name} pins={draggedGate.pins} xOffset={x} yOffset={y}/> : null}
       </header>
     </div>
   );
