@@ -29,6 +29,17 @@ const TopBar = ({name, setName, groupGate}) => {
 const Input = ({id, pinId, deleteInput, setPinHover, handleMouseDownOnPin}) => {
   const [isHover, setIsHover] = useState(false);
   const [onCondition, setOnCondition] = useState(false);
+  const [backgroundColor, setBackgroundColor] = useState("lightgrey");
+
+  useEffect(
+    () => {
+      if (onCondition) {
+        setBackgroundColor("aqua");
+      } else {
+        setBackgroundColor("lightgrey");
+      };
+    }, [onCondition]
+  );
   
   const handleMouseEnter = (e) => {
     e.preventDefault();
@@ -38,11 +49,16 @@ const Input = ({id, pinId, deleteInput, setPinHover, handleMouseDownOnPin}) => {
   const handleMouseLeave = (e) => {
     e.preventDefault();
     setPinHover({isTrue: false, pinId: null, pinType: null, parentGate: null});
-  };
+  }
 
   const handleMouseDown = (e) => {
     e.preventDefault();
     handleMouseDownOnPin(pinId, "output", "grid");
+  };
+
+  const handleMouseClick = (e) => {
+    e.preventDefault();
+    setOnCondition(onCondition=>!onCondition);
   };
 
   const removeInput = (e) => {
@@ -59,7 +75,7 @@ const Input = ({id, pinId, deleteInput, setPinHover, handleMouseDownOnPin}) => {
       </>
       <div style={{display: "flex", outline: "1px solid grey", outlineOffset: "-1px", width: "100%", height: "100%", justifyContent: "flex-end", alignItems: "center", backgroundColor: "#323640"}}>
         <div style={{width: "2vw", height: "2vw"}}>
-          <div id={pinId} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onMouseDown={handleMouseDown} style={{position: "relative", left: "50%", width: "100%", height: "100%", outline: "2px solid grey", borderRadius: "100%", backgroundColor: "lightgrey", cursor: "pointer", zIndex: "4"}}></div>
+          <div id={pinId} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onMouseDown={handleMouseDown} onClick={handleMouseClick} style={{position: "relative", left: "50%", width: "100%", height: "100%", outline: "2px solid grey", borderRadius: "100%", backgroundColor: backgroundColor, cursor: "pointer", zIndex: "4"}}></div>
         </div>
       </div>
 
@@ -190,31 +206,8 @@ const BottomBar = ({gateList, handleMouseDownOnGate}) => {
   );
 };
 
-const UpDownCounter = ({ count, setCount, addInput, removeInput }) => {
-  const up = (e) => {
-    e.preventDefault();
-    setCount(count + 1);
-    addInput()
-  };
-
-  const down = (e) => {
-    if (count > 0) {
-      e.preventDefault();
-      setCount(count - 1);
-      removeInput()
-    };
-  };
-
-  return (
-    <div style={{display: "flex", flexDirection: "row", position: "fixed", top: "8%", left: "0px", border: "1px solid lightgrey", width: "7.8%", height: "5%", justifyContent: "space-evenly"}}>
-      <button onClick={down} style={{border: "none",borderRight: "1px solid lightgrey", backgroundColor: "transparent", fontSize: "medium", width: "33%", color: "lightgrey"}}>-</button>
-      <div style={{fontSize: "x-large", color: "lightgrey"}}>{count}</div>
-      <button onClick={up} style={{border: "none", borderLeft: "1px solid lightgrey", backgroundColor: "transparent", fontSize: "medium", width: "33%", color: "lightgrey"}}>+</button>
-    </div>
-  );
-};
-
 const Pin = ({id, pinType, parentGate, setDisabled, handleMouseDownOnPin, setPinHover}) => {
+
   const handleMouseEnter = (e) => {
     e.preventDefault();
     setDisabled(true);
@@ -269,7 +262,7 @@ const Gate = ({ id, name, pins, handleMouseDownOnPin, setGateHover, setPinHover,
         <div style={{width: "100%", height: "100x"}}>{name}</div>
         <div style={{position: "relative", left: "12px", display: "flex", flexDirection: "column", justifyContent: "center"}}>
           {pins.map(pin=>(
-            pin.pinType === "output" ? <Pin id={pin.id} pinType={"output"} parentGate={id} setDisabled={setDisabled} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/> : null
+            pin.pinType === "output" ? <Pin id={pin.id} onCondition={pin.onCondition} pinType={"output"} parentGate={id} setDisabled={setDisabled} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/> : null
           ))}
         </div>
       </div>
@@ -297,27 +290,29 @@ const DraggedGate = ({id, name, pins, xOffset, yOffset}) => {
 
 const Wire = ({ id, start, end, deleteWire }) => {
   const [deleteButtonText, setDeleteButtonText] = useState("");
-  const [deleteButtonStyle, setDeleteButtonStyle] = useState({})
+  const [deleteButtonStyle, setDeleteButtonStyle] = useState({});
+  const [onCondition, setOnCondition] = useState(false);
+  
   const handleMouseEnter = (e) => {
     e.preventDefault();
-    setDeleteButtonText("x")
-    setDeleteButtonStyle({position: "relative", fontSize: "xx-large", padding: "10px", borderRadius: "15px", color: "red", cursor: "pointer", overflow: "hidden"})
+    setDeleteButtonText("x");
+    setDeleteButtonStyle({position: "relative", fontSize: "xx-large", padding: "10px", borderRadius: "15px", color: "red", cursor: "pointer", overflow: "hidden"});
   };
 
   const handleMouseLeave = (e) => {
     e.preventDefault();
     setDeleteButtonText("");
-    setDeleteButtonStyle({})
+    setDeleteButtonStyle({});
   };
 
   const handleClickDelete = (e) => {
     e.preventDefault();
     deleteWire(id);
-  }
+  };
 
   return (
     <div onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-    <Xarrow id={id} start={start} end={end} curveness={0.5} labels={{middle: <div onClick={handleClickDelete} style={deleteButtonStyle}>{deleteButtonText}</div>}} headSize={0} startAnchor='middle' endAnchor='middle' color='lightgrey' zIndex={0}/>
+      <Xarrow id={id} start={start} end={end} curveness={0.5} labels={{middle: <div onClick={handleClickDelete} style={deleteButtonStyle}>{deleteButtonText}</div>}} headSize={0} startAnchor='middle' endAnchor='middle' color='lightgrey' zIndex={0}/>
     </div>
   );
 };
