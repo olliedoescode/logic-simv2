@@ -1,4 +1,4 @@
-const {app, BrowserWindow, ipcMain, dialog} = require("electron");
+const {app, BrowserWindow, dialog, ipcMain, Menu} = require("electron");
 const path = require("path");
 const {createStore} = require("./storage");
 
@@ -43,6 +43,8 @@ const createWindow = () => {
     height: 900,
     minWidth: 960,
     minHeight: 640,
+    title: "Logic Studio",
+    autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -58,6 +60,7 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   store = createStore(app.getPath("userData"));
   registerHandlers();
   createWindow();

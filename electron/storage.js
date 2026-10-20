@@ -24,7 +24,7 @@ const createStore = (userDataPath) => {
   });
 
   const serializeProject = (project) => JSON.stringify(project);
-  const deserializeProject = (serialized) => JSON.parse(serialized);
+  const deserializeProject = (row) => JSON.parse(row.workspace);
 
   return {
     listProjects: () => {
