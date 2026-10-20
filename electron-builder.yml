@@ -1,16 +1,47 @@
 extends: null
 appId: com.logicstudio.app
 productName: Logic Studio
+copyright: Copyright © 2026 Logic Studio
 directories:
   output: release
+  buildResources: build-resources
 files:
   - build/**
   - electron/**
   - package.json
+artifactName: ${name}-${version}-${os}-${arch}.${ext}
+icon: build-resources/icon.png
 mac:
   category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
 win:
-  target: nsis
+  icon: build-resources/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Logic Studio
 linux:
-  target: AppImage
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
   category: Development
+  synopsis: Logic circuit editor and simulator
+  maintainer: Logic Studio <16obignell@gmail.com>
+  vendor: Logic Studio
+  syncDesktopName: true
+  desktop:
+    entry:
+      Name: Logic Studio
+      StartupWMClass: Logic Studio

@@ -44,6 +44,7 @@ const createWindow = () => {
     minWidth: 960,
     minHeight: 640,
     title: "Logic Studio",
+    icon: path.join(__dirname, "..", "build", "image.png"),
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,

@@ -2,7 +2,8 @@
   "name": "logic-studio",
   "version": "0.1.0",
   "description": "Cross-platform logic circuit editor and simulator",
-  "author": "Logic Studio",
+  "author": "Logic Studio <16obignell@gmail.com>",
+  "homepage": "./",
   "private": true,
   "main": "electron/main.js",
   "dependencies": {
@@ -24,6 +25,9 @@
     "build": "react-scripts build",
     "electron:start": "concurrently -k \"BROWSER=none npm start\" \"wait-on http://localhost:3000 && cross-env ELECTRON_START_URL=http://localhost:3000 electron .\"",
     "electron:build": "npm run build && electron-builder",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

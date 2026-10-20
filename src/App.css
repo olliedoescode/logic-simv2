@@ -428,17 +428,11 @@
 }
 
 .brand-mark {
-  display: inline-grid;
+  display: block;
   width: 30px;
   height: 30px;
-  place-items: center;
-  border: 1px solid rgba(102, 217, 166, 0.35);
+  object-fit: contain;
   border-radius: 9px;
-  background: rgba(102, 217, 166, 0.1);
-  color: var(--accent);
-  font-size: 21px;
-  font-weight: 700;
-  line-height: 1;
 }
 
 .brand-name {

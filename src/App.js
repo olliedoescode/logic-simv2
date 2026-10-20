@@ -56,7 +56,7 @@ const ColorPickerMenu = ({color, setColor}) => {
 const TopBar = ({openGateDialog, onBackToGates, editingGateId, name, setName, onApplyChanges, gateColor, setGateColor}) => {
   return (
   <div className="topbar">
-    <div className="brand-lockup"><span className="brand-mark">∿</span><span className="brand-name">Logic Studio</span><span className="brand-context">/ workspace</span></div>
+    <div className="brand-lockup"><img className="brand-mark" src={`${process.env.PUBLIC_URL}/image.png`} alt="" /><span className="brand-name">Logic Studio</span><span className="brand-context">/ workspace</span></div>
     <button className="group-button" onClick={onBackToGates} type="button">Menu</button>
     {editingGateId ? (
       <input className="topbar-gate-name" value={name} onChange={(event) => setName(event.target.value)} aria-label="Gate name" />
