@@ -1,0 +1,16 @@
+extends: null
+appId: com.logicstudio.app
+productName: Logic Studio
+directories:
+  output: release
+files:
+  - build/**
+  - electron/**
+  - package.json
+mac:
+  category: public.app-category.developer-tools
+win:
+  target: nsis
+linux:
+  target: AppImage
+  category: Development

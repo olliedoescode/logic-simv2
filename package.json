@@ -1,7 +1,10 @@
 {
   "name": "logic-simv2",
   "version": "0.1.0",
+  "description": "Cross-platform logic circuit editor and simulator",
+  "author": "Logic Studio",
   "private": true,
+  "main": "electron/main.js",
   "dependencies": {
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "^13.4.0",
@@ -13,13 +16,23 @@
     "react-draggable": "^4.4.5",
     "react-scripts": "5.0.1",
     "react-xarrows": "^2.0.2",
+    "sqlite3": "^5.1.7",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "electron:start": "concurrently -k \"BROWSER=none npm start\" \"wait-on http://localhost:3000 && cross-env ELECTRON_START_URL=http://localhost:3000 electron .\"",
+    "electron:build": "npm run build && electron-builder",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.3.3",
+    "electron-builder": "^26.0.12",
+    "wait-on": "^8.0.3"
   },
   "eslintConfig": {
     "extends": [

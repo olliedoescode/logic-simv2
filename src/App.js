@@ -1,17 +1,97 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import uniqueId from 'lodash/uniqueId';
 import {useXarrow, Xwrapper} from 'react-xarrows';
 import './App.css';
+import {compileCircuit} from './simulation/compileCircuit';
+import {initializeCircuit, propagateCircuit} from './simulation/simulateCircuit';
+import {createDefaultProject, createProjectId, parseProject, serializeProject} from './storage/projectStorage';
+import {loadInitialData, repository} from './storage/repository';
 
-const TopBar = ({openGateDialog}) => {
+const TopBar = ({openGateDialog, projectName, projects, onNewProject, onSaveProject, onOpenProject, onRenameProject, onExportProject, onImportProject, onImportFile, onDuplicateProject, onDeleteProject, onBackToGates}) => {
+  const importInputRef = useRef(null);
   return (
   <div className="topbar" style={{display: "flex", flexDirection: "row", outline: "1px solid grey", outlineOffset: "-1px", width: "100%", height: "8%", backgroundColor: "transparent"}}>
     <div className="brand-lockup"><span className="brand-mark">∿</span><span className="brand-name">Logic Studio</span><span className="brand-context">/ workspace</span></div>
+    {onBackToGates ? <button className="group-button" onClick={onBackToGates} type="button">Menu</button> : null}
+    <input className="project-name-input" value={projectName} onChange={(event) => onRenameProject(event.target.value)} aria-label="Project name" />
     <div className="topbar-spacer"></div>
+    <button className="group-button" onClick={onNewProject} type="button">New</button>
+    <button className="group-button" onClick={onSaveProject} type="button">Save</button>
+    <select className="project-select" value="" onChange={(event) => onOpenProject(event.target.value)} aria-label="Open saved project">
+      <option value="" disabled>Open project</option>
+      {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+    </select>
+    <button className="group-button" onClick={onDuplicateProject} type="button">Duplicate</button>
+    <button className="group-button group-button-danger" onClick={onDeleteProject} type="button">Delete project</button>
+    <button className="group-button" onClick={onExportProject} type="button">Export</button>
+    <button className="group-button" onClick={onImportProject} type="button">Import</button>
+    <input className="project-import-input" ref={importInputRef} type="file" accept=".logicstudio,.json,application/json" hidden onChange={onImportFile} />
     <button className="group-button" onClick={openGateDialog} type="button">Save gate</button>
   </div>
   );
 };
+
+const ProjectMenu = ({projects, onNewProject, onOpenProject, onDeleteProject, onDuplicateProject, onImportProject}) => (
+  <main className="library-screen">
+    <div className="library-heading">
+      <span className="dialog-eyebrow">LOGIC STUDIO</span>
+      <h1>Projects</h1>
+      <p>Open a saved circuit or start a new project.</p>
+    </div>
+    <div className="library-actions">
+      <button className="library-create-card" type="button" onClick={onNewProject}>
+        <span className="library-plus">+</span>
+        <strong>New project</strong>
+      </button>
+      <button className="library-action-button" type="button" onClick={onImportProject}>Import project</button>
+    </div>
+    <div className="library-grid">
+      {projects.map((project) => (
+        <article className="library-card" key={project.id}>
+          <button className="library-card-open" type="button" onClick={() => onOpenProject(project.id)}>
+            <span className="library-card-preview"><span>{project.gateDefinitions?.length || 0}</span> saved gates</span>
+            <strong>{project.name}</strong>
+            <small>Updated {new Date(project.updatedAt).toLocaleString()}</small>
+          </button>
+          <div className="library-card-actions">
+            <button type="button" onClick={() => onDuplicateProject(project)}>Duplicate</button>
+            <button type="button" onClick={() => onDeleteProject(project)}>Delete</button>
+          </div>
+        </article>
+      ))}
+    </div>
+  </main>
+);
+
+const GateMenu = ({projectName, gates, onCreateGate, onOpenGate, onDeleteGate, onBackToProjects}) => (
+  <main className="library-screen">
+    <div className="library-heading">
+      <button className="library-back-button" type="button" onClick={onBackToProjects}>← Projects</button>
+      <span className="dialog-eyebrow">PROJECT</span>
+      <h1>{projectName}</h1>
+      <p>Choose a gate workspace or create a new one.</p>
+    </div>
+    <div className="library-grid gate-library-grid">
+      <button className="library-create-card" type="button" onClick={onCreateGate}>
+        <span className="library-plus">+</span>
+        <strong>Create new gate</strong>
+      </button>
+      {gates.map((gate) => (
+        <article className="library-card gate-preview-card" key={gate.id}>
+          <button type="button" className="gate-preview-open" onClick={() => onOpenGate(gate)}>
+            <span className="gate-preview-chip" style={{backgroundColor: gate.color}} />
+            <strong>{gate.name}</strong>
+            <small>{gate.inputs} inputs · {gate.outputs} outputs</small>
+          </button>
+          <div className="gate-preview-actions">
+            <button type="button" onClick={() => onOpenGate(gate)}>Edit</button>
+            <button type="button" onClick={() => onDeleteGate(gate)}>Delete</button>
+          </div>
+        </article>
+      ))}
+    </div>
+  </main>
+);
 
 const DraftWire = ({draft, x, y}) => {
   const start = getPinPoint(draft.startPin);
@@ -20,8 +100,7 @@ const DraftWire = ({draft, x, y}) => {
   return <svg className="wire-layer wire-layer-draft" aria-hidden="true"><path d={path} className="wire-path wire-path-draft" /></svg>;
 };
 
-const Input = ({id, pinId, selected, setPinHover, handleMouseDownOnPin, openContextMenu}) => {
-  const [onCondition, setOnCondition] = useState(false);
+const Input = ({id, pinId, selected, isOn, onToggle, setPinHover, handleMouseDownOnPin, openContextMenu}) => {
   
   const handleMouseEnter = (e) => {
     e.preventDefault();
@@ -42,14 +121,14 @@ const Input = ({id, pinId, selected, setPinHover, handleMouseDownOnPin, openCont
   const handleMouseClick = (e) => {
     e.preventDefault();
     if (e.button !== 0 || e.shiftKey) return;
-    setOnCondition(onCondition=>!onCondition);
+    onToggle(pinId);
   };
 
   return (
     <div className={`boundary-pin-row input-row${selected ? " boundary-pin-selected" : ""}`} id={id} onContextMenu={(e) => openContextMenu(e, id, pinId, "input")} style={{display: "flex", flexDirection: "row", width: "100%", height: "7%"}}>
       <div className="boundary-pin-body input-body" style={{display: "flex", outline: "1px solid grey", outlineOffset: "-1px", width: "100%", height: "100%", justifyContent: "flex-end", alignItems: "center", backgroundColor: "#323640"}}>
         <div className="pin-stem">
-          <div className={`boundary-pin ${onCondition ? "boundary-pin-on" : ""}`} id={pinId} data-wire-pin-id={pinId} data-wire-pin-type="output" data-wire-pin-parent="grid" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onMouseDown={handleMouseDown} onClick={handleMouseClick}></div>
+          <div className={`boundary-pin${isOn ? " boundary-pin-on" : ""}`} id={pinId} data-wire-pin-id={pinId} data-wire-pin-type="output" data-wire-pin-parent="grid" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onMouseDown={handleMouseDown} onClick={handleMouseClick}></div>
         </div>
       </div>
 
@@ -57,7 +136,7 @@ const Input = ({id, pinId, selected, setPinHover, handleMouseDownOnPin, openCont
   )
 };
 
-const InputBar = ({inputs, setInputs, setWires, setPinHover, handleMouseDownOnPin, openContextMenu, selectedIds = []}) => {
+const InputBar = ({inputs, setInputs, setWires, simulationStates, onToggleInput, setPinHover, handleMouseDownOnPin, openContextMenu, selectedIds = []}) => {
 
   const addInput = () => {
     setInputs([...inputs, {id: uniqueId(), pinId: uniqueId()}]);
@@ -69,14 +148,14 @@ const InputBar = ({inputs, setInputs, setWires, setPinHover, handleMouseDownOnPi
       <div style={{width: "100%", height: "6.5%"}}></div>
       <div style={{display: "flex", flexDirection: "column", width: "100%", height: "93.5%", justifyContent: "space-evenly"}}>
       {inputs.map(input=>(
-        <Input key={input.id} id={input.id} pinId={input.pinId} selected={selectedIds.includes(input.id)} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin} openContextMenu={openContextMenu}/>
+        <Input key={input.id} id={input.id} pinId={input.pinId} isOn={Boolean(simulationStates[input.pinId])} onToggle={onToggleInput} selected={selectedIds.includes(input.id)} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin} openContextMenu={openContextMenu}/>
       ))}
       </div>
     </div>
   );
 };
 
-const MainGrid = ({draggedPinActive, setMouseOverGrid, x, y, gates, setGateHover, handleMouseDownOnPin, setPinHover, wires, deleteWire, deleteWirePoint, selectedIds, onDragStart, onContextMenu, wireDraft, addWirePoint, addWirePointToWire, moveWirePoint, finishWirePoint}) => {
+const MainGrid = ({draggedPinActive, setMouseOverGrid, x, y, gates, simulationStates, setGateHover, handleMouseDownOnPin, setPinHover, wires, deleteWire, deleteWirePoint, selectedIds, onDragStart, onContextMenu, wireDraft, addWirePoint, addWirePointToWire, moveWirePoint, finishWirePoint}) => {
 
   const handleMouseEnter = (e) => {
     e.preventDefault();
@@ -91,17 +170,17 @@ const MainGrid = ({draggedPinActive, setMouseOverGrid, x, y, gates, setGateHover
   return (
   <div className="canvas" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onClick={(event) => wireDraft && !event.target.closest(".gate-pin, .boundary-pin") && addWirePoint(event)} style={{width: "90%", height: "100%", outline: "1px solid grey", outlineOffset: "-1px"}}>
     {gates.map(gate=>(
-      <Gate key={gate.id} id={gate.id} name={gate.name} color={gate.color} pins={gate.pins} selected={selectedIds.includes(gate.id)} handleMouseDownOnPin={handleMouseDownOnPin} setGateHover={setGateHover} setPinHover={setPinHover} xOffset={gate.xOffset} yOffset={gate.yOffset} onDragStart={onDragStart} onContextMenu={onContextMenu}/>
+      <Gate key={gate.id} id={gate.id} name={gate.name} color={gate.color} pins={gate.pins} simulationStates={simulationStates} selected={selectedIds.includes(gate.id)} handleMouseDownOnPin={handleMouseDownOnPin} setGateHover={setGateHover} setPinHover={setPinHover} xOffset={gate.xOffset} yOffset={gate.yOffset} onDragStart={onDragStart} onContextMenu={onContextMenu}/>
     ))}
     {wires.map(wire=>(
-      <Wire key={wire.id} id={wire.id} start={wire.start} end={wire.end} points={wire.points} deleteWire={deleteWire} deleteWirePoint={deleteWirePoint} addWirePoint={addWirePointToWire} moveWirePoint={moveWirePoint} finishWirePoint={finishWirePoint}/>
+      <Wire key={wire.id} id={wire.id} start={wire.start} end={wire.end} isActive={Boolean(simulationStates[wire.start])} points={wire.points} deleteWire={deleteWire} deleteWirePoint={deleteWirePoint} addWirePoint={addWirePointToWire} moveWirePoint={moveWirePoint} finishWirePoint={finishWirePoint}/>
     ))}
     {wireDraft ? <DraftWire draft={wireDraft} x={x} y={y}/> : null}
   </div>
   );
 };
 
-const Output = ({id, pinId, selected, setPinHover, handleMouseDownOnPin, openContextMenu}) => {
+const Output = ({id, pinId, isOn, selected, setPinHover, handleMouseDownOnPin, openContextMenu}) => {
   
   const handleMouseEnter = (e) => {
     e.preventDefault();
@@ -122,14 +201,14 @@ const Output = ({id, pinId, selected, setPinHover, handleMouseDownOnPin, openCon
     <div className={`boundary-pin-row output-row${selected ? " boundary-pin-selected" : ""}`} id={id} onContextMenu={(e) => openContextMenu(e, id, pinId, "output")} style={{display: "flex", flexDirection: "row", width: "100%", height: "7%"}}>
       <div className="boundary-pin-body output-body" style={{display: "flex", outline: "1px solid grey", outlineOffset: "-1px", width: "100%", height: "100%", justifyContent: "flex-start", alignItems: "center", backgroundColor: "#323640"}}>
         <div className="pin-stem">
-        <div className="boundary-pin" id={pinId} data-wire-pin-id={pinId} data-wire-pin-type="input" data-wire-pin-parent="grid" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onMouseDown={handleMouseDown}></div>
+        <div className={`boundary-pin${isOn ? " boundary-pin-on" : ""}`} id={pinId} data-wire-pin-id={pinId} data-wire-pin-type="input" data-wire-pin-parent="grid" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onMouseDown={handleMouseDown}></div>
         </div>
       </div>
     </div>
   )
 };
 
-const OutputBar = ({outputs, setOutputs, setWires, setPinHover, handleMouseDownOnPin, openContextMenu, selectedIds = []}) => {
+const OutputBar = ({outputs, setOutputs, setWires, simulationStates, setPinHover, handleMouseDownOnPin, openContextMenu, selectedIds = []}) => {
 
   const addOutput = (e) => {
     e.preventDefault();
@@ -140,13 +219,13 @@ const OutputBar = ({outputs, setOutputs, setWires, setPinHover, handleMouseDownO
     <div className="side-panel output-panel" style={{display: "flex", flexDirection: "column", width: "5%", height: "100%", outline: "1px solid grey", outlineOffset: "-1px", justifyContent: "space-evenly"}}>
       <button className="add-pin-button" onClick={addOutput} type="button">Add output</button>
       {outputs.map(output=>(
-        <Output key={output.id} id={output.id} pinId={output.pinId} selected={selectedIds.includes(output.id)} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin} openContextMenu={openContextMenu}/>
+        <Output key={output.id} id={output.id} pinId={output.pinId} isOn={Boolean(simulationStates[output.pinId])} selected={selectedIds.includes(output.id)} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin} openContextMenu={openContextMenu}/>
       ))}
     </div>
   );
 };
 
-const BottomBar = ({gateList, handleMouseDownOnGate}) => {
+const BottomBar = ({gateList, handleMouseDownOnGate, openGateDefinition}) => {
 
   const handleMouseDown = (e) => {
     e.preventDefault();
@@ -156,13 +235,13 @@ const BottomBar = ({gateList, handleMouseDownOnGate}) => {
   return (
     <div className="gate-library" style={{display: "flex", flexDirection: "row",width: "100%", height: "12%", outline: "1px solid grey", outlineOffset: "-1px", justifyContent: "start"}}>
       {gateList.map(gate=>(
-        <div className="gate-library-item" id={gate.id} onMouseDown={handleMouseDown} key={gate.id} style={{border: "2px solid grey", borderRadius: "15px", padding: "10px", backgroundColor: "transparent", marginLeft: "5px", marginTop: "8px", marginBottom: "8px", fontSize: "medium"}}>{gate.name}</div>
+        <div className="gate-library-item" id={gate.id} onMouseDown={handleMouseDown} onDoubleClick={() => openGateDefinition(gate)} key={gate.id} title={gate.builtIn ? "Drag to place" : "Drag to place, double-click to open"} style={{border: "2px solid grey", borderRadius: "15px", padding: "10px", backgroundColor: "transparent", marginLeft: "5px", marginTop: "8px", marginBottom: "8px", fontSize: "medium"}}>{gate.name}</div>
       ))}
     </div>  
   );
 };
 
-const Pin = ({id, pinType, parentGate, setDisabled, handleMouseDownOnPin, setPinHover}) => {
+const Pin = ({id, pinType, parentGate, isOn, setDisabled, handleMouseDownOnPin, setPinHover}) => {
 
   const handleMouseEnter = (e) => {
     e.preventDefault();
@@ -183,7 +262,7 @@ const Pin = ({id, pinType, parentGate, setDisabled, handleMouseDownOnPin, setPin
   };
 
   return (
-    <div className="gate-pin" id={id} data-wire-pin-id={id} data-wire-pin-type={pinType} data-wire-pin-parent={parentGate} style={{}} onMouseOver={handleMouseEnter} onMouseOut={handleMouseLeave} onMouseDown={handleMouseDown}></div>
+    <div className={`gate-pin${isOn ? " gate-pin-on" : ""}`} id={id} data-wire-pin-id={id} data-wire-pin-type={pinType} data-wire-pin-parent={parentGate} style={{}} onMouseOver={handleMouseEnter} onMouseOut={handleMouseLeave} onMouseDown={handleMouseDown}></div>
   );
 };
 
@@ -194,7 +273,7 @@ const getGateTextColor = (color) => {
   return (r * 299 + g * 587 + b * 114) / 1000 > 155 ? "#11161a" : "#ffffff";
 };
 
-const Gate = ({ id, name, color, pins, selected, handleMouseDownOnPin, setGateHover, setPinHover, xOffset, yOffset, onDragStart, onContextMenu }) => {
+const Gate = ({ id, name, color, pins, simulationStates, selected, handleMouseDownOnPin, setGateHover, setPinHover, xOffset, yOffset, onDragStart, onContextMenu }) => {
   const [disabled, setDisabled] = useState(false);
   
 
@@ -206,16 +285,16 @@ const Gate = ({ id, name, color, pins, selected, handleMouseDownOnPin, setGateHo
   };
 
   return (
-      <div className={`logic-gate${selected ? " logic-gate-selected" : ""}`} id={id} onMouseDown={handleMouseDown} onContextMenu={(event) => onContextMenu(event, id)} style={{position: "fixed", top: yOffset, left: xOffset, display: "flex", flexDirection: "row", backgroundColor: color, color: getGateTextColor(color), fontSize: "medium", zIndex: "2"}}>
+      <div className={`logic-gate${selected ? " logic-gate-selected" : ""}`} id={id} onMouseDown={handleMouseDown} onContextMenu={(event) => onContextMenu(event, id)} style={{position: "fixed", top: yOffset, left: xOffset, display: "flex", flexDirection: "row", backgroundColor: color, color: getGateTextColor(color), fontSize: "medium", zIndex: "5"}}>
         <div style={{position: "relative", left: "-12px", display: "flex", flexDirection: "column", justifyContent: "center"}}>
           {pins.map(pin=>(
-            pin.pinType === "input" ? <Pin key={pin.id} id={pin.id} pinType={"input"} parentGate={id} setDisabled={setDisabled} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/> : null
+            pin.pinType === "input" ? <Pin key={pin.id} id={pin.id} isOn={Boolean(simulationStates[pin.id])} pinType={"input"} parentGate={id} setDisabled={setDisabled} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/> : null
           ))}
         </div>
         <div style={{width: "100%", height: "100x"}}>{name}</div>
         <div style={{position: "relative", left: "12px", display: "flex", flexDirection: "column", justifyContent: "center"}}>
           {pins.map(pin=>(
-            pin.pinType === "output" ? <Pin key={pin.id} id={pin.id} onCondition={pin.onCondition} pinType={"output"} parentGate={id} setDisabled={setDisabled} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/> : null
+            pin.pinType === "output" ? <Pin key={pin.id} id={pin.id} isOn={Boolean(simulationStates[pin.id])} pinType={"output"} parentGate={id} setDisabled={setDisabled} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover}/> : null
           ))}
         </div>
       </div>
@@ -270,7 +349,7 @@ const createSmoothPath = (points) => {
   return path;
 };
 
-const Wire = ({ id, start, end, points = [], deleteWire, addWirePoint, moveWirePoint, finishWirePoint, deleteWirePoint }) => {
+const Wire = ({ id, start, end, isActive, points = [], deleteWire, addWirePoint, moveWirePoint, finishWirePoint, deleteWirePoint }) => {
   const [, setVersion] = useState(0);
   useEffect(() => {
     const update = () => setVersion((value) => value + 1);
@@ -287,8 +366,8 @@ const Wire = ({ id, start, end, points = [], deleteWire, addWirePoint, moveWireP
   };
   return (
     <svg className="wire-layer" aria-hidden="true">
-      <path d={path} className="wire-path" onClick={handlePathClick} onContextMenu={(event) => { event.preventDefault(); deleteWire(id); }} />
-      <path d={path} className="wire-path-inner" />
+      <path d={path} className={`wire-path${isActive ? " wire-path-active" : ""}`} onClick={handlePathClick} onContextMenu={(event) => { event.preventDefault(); deleteWire(id); }} />
+      <path d={path} className={`wire-path-inner${isActive ? " wire-path-active" : ""}`} />
       {points.map((point, index) => (
         <circle
           key={`${id}-${index}`}
@@ -372,16 +451,18 @@ const GateDialog = ({name, setName, color, setColor, onCancel, onSave}) => (
 );
 
 export default function App() {
+  const initialProject = useMemo(() => createDefaultProject(), []);
   const [x, setX] = useState();
   const [y, setY] = useState();
-  const [inputs, setInputs] = useState([]);
-  const [outputs, setOutputs] = useState([]);
+  const [projectId, setProjectId] = useState(initialProject.id);
+  const [projectName, setProjectName] = useState(initialProject.name);
+  const [inputs, setInputs] = useState(initialProject.workspace.inputs);
+  const [outputs, setOutputs] = useState(initialProject.workspace.outputs);
   const [name, setName] = useState("");
   const [gateList, setGateList] = useState([]);
-  const [gateListID, setGateListID] = useState(2);
-  const [gates, setGates] = useState([]);
-  const [wires, setWires] = useState([]);
-  const [draggedGate, setDraggedGate] = useState({isTrue: false, isBatch: false, sourceId: null, id: null, name: null, color: null, pins: null, count: 1})
+  const [gates, setGates] = useState(initialProject.workspace.gates);
+  const [wires, setWires] = useState(initialProject.workspace.wires);
+  const [draggedGate, setDraggedGate] = useState({isTrue: false, isBatch: false, sourceId: null, id: null, name: null, color: null, pins: null, definitionId: null, count: 1})
   const [mouseOverGrid, setMouseOverGrid] = useState(false);
   const [draggedPinActive, setDraggedPinActive] = useState(false);
   const [pinHover, setPinHover] = useState({isTrue: false, pinId: null, pinType: null, parentGate: null});
@@ -396,16 +477,86 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [selection, setSelection] = useState(null);
   const [wireDraft, setWireDraft] = useState(null);
+  const [simulation, setSimulation] = useState({
+    states: initialProject.workspace.simulationStates || {},
+    unstable: false
+  });
   const gateDragRef = useRef(null);
   const batchPlacementRef = useRef(false);
   const batchPlacedRef = useRef(0);
   const [batchPreviewVisible, setBatchPreviewVisible] = useState(true);
+  const [projects, setProjects] = useState([]);
+  const [isStorageReady, setIsStorageReady] = useState(false);
+  const [screen, setScreen] = useState("project-menu");
+  const [editingGateId, setEditingGateId] = useState(null);
 
-  useEffect(
-    () => {
-      setGateList([{id: "0", name: "AND", color: "#d95773", inputs: 2, outputs: 1}, {id: "1", name: "NOT", color: "#5b8def", inputs: 1, outputs: 1}])
-    }, []
+  useEffect(() => {
+    loadInitialData().then(({project, projects: savedProjects}) => {
+      setProjectId(project.id);
+      setProjectName(project.name);
+      setInputs(project.workspace.inputs);
+      setOutputs(project.workspace.outputs);
+      setGates(project.workspace.gates);
+      setWires(project.workspace.wires);
+      setSimulation({states: project.workspace.simulationStates || {}, unstable: false});
+      setProjects(savedProjects);
+      setGateList([
+        {id: "0", name: "AND", color: "#d95773", inputs: 2, outputs: 1, builtIn: true},
+        {id: "1", name: "NOT", color: "#5b8def", inputs: 1, outputs: 1, builtIn: true},
+        ...(project.gateDefinitions || [])
+      ]);
+      setScreen("project-menu");
+      setIsStorageReady(true);
+    }).catch((error) => {
+      console.error("Unable to load Logic Studio storage.", error);
+      setIsStorageReady(true);
+    });
+  }, []);
+
+  const topologyKey = JSON.stringify({
+    gates: gates.map(({id, name, pins}) => ({id, name, pins})),
+    inputs: inputs.map(({id, pinId}) => ({id, pinId})),
+    outputs: outputs.map(({id, pinId}) => ({id, pinId})),
+    wires: wires.map(({id, start, end}) => ({id, start, end})),
+    definitions: gateList.filter((gate) => !gate.builtIn)
+  });
+  // The logical snapshot intentionally ignores gate positions and wire kink coordinates.
+  const topology = useMemo(() => ({
+    gates: gates.map(({id, name, pins}) => ({id, name, pins})),
+    inputs: inputs.map(({id, pinId}) => ({id, pinId})),
+    outputs: outputs.map(({id, pinId}) => ({id, pinId})),
+    wires: wires.map(({id, start, end}) => ({id, start, end})),
+    definitions: gateList.filter((gate) => !gate.builtIn)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [topologyKey]);
+  const compiledCircuit = useMemo(
+    () => compileCircuit(topology.gates, topology.inputs, topology.outputs, topology.wires, topology.definitions),
+    [topology]
   );
+
+  useEffect(() => {
+    setSimulation((currentSimulation) => initializeCircuit(compiledCircuit, currentSimulation.states));
+  }, [compiledCircuit]);
+
+  const toggleInput = (pinId) => {
+    setSimulation((currentSimulation) => {
+      const nextStates = {
+        ...currentSimulation.states,
+        [pinId]: !currentSimulation.states[pinId]
+      };
+      return propagateCircuit(compiledCircuit, nextStates, [pinId]);
+    });
+  };
+  useEffect(() => {
+    if (!isStorageReady) return;
+    repository.saveProject({
+      ...initialProject,
+      id: projectId,
+      name: projectName,
+      workspace: {inputs, outputs, gates, wires, simulationStates: simulation.states},
+      gateDefinitions: gateList.filter((gate) => !gate.builtIn)
+    }).then(() => repository.listProjects()).then(setProjects);
+  }, [projectId, projectName, inputs, outputs, gates, wires, simulation.states, gateList, initialProject, isStorageReady]);
   
   useEffect(
     () => {
@@ -485,15 +636,35 @@ export default function App() {
     } else if (false){
       // test for pins
     } else {
-      setGateList([...gateList, {id: gateListID, name: name, color: gateColor, inputs: inputs.length, outputs: outputs.length}]);
-      setGateListID(gateListID + 1); 
-      console.log("new gate created, name: ", name, " id: ", gateListID);
+      const existingGate = editingGateId
+        ? gateList.find((gate) => gate.id === editingGateId)
+        : null;
+      const definitionId = existingGate?.id || createProjectId();
+      const definition = {
+        id: definitionId,
+        name,
+        color: gateColor,
+        inputs: inputs.length,
+        outputs: outputs.length,
+        version: (existingGate?.version || 0) + 1,
+        definition: {
+          inputs,
+          outputs,
+          gates,
+          wires
+        }
+      };
+      setGateList((currentGates) => existingGate
+        ? currentGates.map((gate) => gate.id === definition.id ? definition : gate)
+        : [...currentGates, definition]);
       setGates([]);
       setInputs([]);
       setOutputs([]);
       setName("");
       setGateColor("#e05c7a");
       setIsGateDialogOpen(false);
+      setEditingGateId(null);
+      setScreen("gate-menu");
     };
   };
 
@@ -518,6 +689,7 @@ export default function App() {
       name: gate.name,
       color: gate.color,
       pins: generatePins(gate.inputs, gate.outputs),
+      definitionId: gate.definitionId || gate.id,
       count: 1
     });
   }; 
@@ -532,6 +704,7 @@ export default function App() {
         id: uniqueId(),
         name: draggedGate.name,
         color: draggedGate.color,
+        definitionId: draggedGate.definitionId,
         pins: count > 1
           ? generatePins(
             draggedGate.pins.filter((pin) => pin.pinType === "input").length,
@@ -922,18 +1095,248 @@ export default function App() {
 
   const deleteBoundaryPin = (id) => deleteSelectedItems(id);
 
+  const saveCurrentProject = () => {
+    repository.saveProject({
+      ...initialProject,
+      id: projectId,
+      name: projectName,
+      workspace: {inputs, outputs, gates, wires, simulationStates: simulation.states},
+      gateDefinitions: gateList.filter((gate) => !gate.builtIn)
+    });
+    repository.listProjects().then(setProjects);
+  };
+
+  const startNewProject = () => {
+    const project = createDefaultProject("Untitled workspace");
+    setProjectId(project.id);
+    setProjectName(project.name);
+    setInputs([]);
+    setOutputs([]);
+    setGates([]);
+    setWires([]);
+    setGateList([
+      {id: "0", name: "AND", color: "#d95773", inputs: 2, outputs: 1, builtIn: true},
+      {id: "1", name: "NOT", color: "#5b8def", inputs: 1, outputs: 1, builtIn: true}
+    ]);
+    setSimulation({states: {}, unstable: false});
+    setSelectedIds([]);
+    setScreen("gate-menu");
+  };
+
+  const duplicateCurrentProject = () => {
+    const project = {
+      ...initialProject,
+      id: projectId,
+      name: projectName || "Untitled workspace",
+      workspace: {inputs, outputs, gates, wires, simulationStates: simulation.states},
+      gateDefinitions: gateList.filter((gate) => !gate.builtIn)
+    };
+    repository.duplicateProject(project).then((duplicate) => {
+      setProjectId(duplicate.id);
+      setProjectName(duplicate.name);
+      return repository.listProjects();
+    }).then(setProjects);
+  };
+
+  const deleteCurrentProject = () => {
+    if (!window.confirm(`Delete "${projectName}"?`)) return;
+    repository.deleteProject(projectId).then(() => {
+      const remaining = repository.listProjects();
+      return remaining;
+    }).then((remaining) => {
+      if (remaining.length) {
+        openSavedProject(remaining[0].id);
+      } else {
+        startNewProject();
+      }
+      setProjects(remaining);
+    });
+  };
+
+  const openSavedProject = (id, openWorkspace = false) => {
+    repository.loadProject(id).then((project) => {
+    if (!project) return;
+    setProjectId(project.id);
+    setProjectName(project.name);
+    setInputs(project.workspace.inputs);
+    setOutputs(project.workspace.outputs);
+    setGates(project.workspace.gates);
+    setWires(project.workspace.wires);
+    setSimulation({states: project.workspace.simulationStates || {}, unstable: false});
+    setGateList([
+      {id: "0", name: "AND", color: "#d95773", inputs: 2, outputs: 1, builtIn: true},
+      {id: "1", name: "NOT", color: "#5b8def", inputs: 1, outputs: 1, builtIn: true},
+      ...(project.gateDefinitions || [])
+    ]);
+    setSelectedIds([]);
+    setScreen(openWorkspace ? "gate-workspace" : "gate-menu");
+    });
+  };
+
+  const renameProject = (nextName) => {
+    setProjectName(nextName.slice(0, 80));
+  };
+
+  const exportCurrentProject = async () => {
+    const project = {
+      ...initialProject,
+      id: projectId,
+      name: projectName || "Untitled workspace",
+      workspace: {inputs, outputs, gates, wires, simulationStates: simulation.states},
+      gateDefinitions: gateList.filter((gate) => !gate.builtIn)
+    };
+    const serializedProject = serializeProject(project);
+    if (repository.importProject) {
+      const nativeResult = await repository.exportProject(serializedProject);
+      if (nativeResult?.canceled === false && nativeResult.filePath) return;
+    }
+    const blob = new Blob([serializedProject], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${(project.name || "logic-studio").replace(/[^a-z0-9-_]+/gi, "-")}.logicstudio`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importProject = async (event) => {
+    const nativeResult = await repository.importProject();
+    if (nativeResult && !nativeResult.canceled) {
+      try {
+        const project = parseProject(nativeResult.serializedProject);
+        await repository.saveProject(project);
+        await openSavedProject(project.id);
+        setProjects(await repository.listProjects());
+      } catch (error) {
+        console.error("Unable to import Logic Studio project.", error);
+        window.alert(error.message);
+      }
+      return;
+    }
+    if (!event) {
+      document.querySelector(".project-import-input")?.click();
+      return;
+    }
+    const [file] = event.target.files || [];
+    event.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const project = parseProject(String(reader.result));
+        repository.saveProject(project).then(() => openSavedProject(project.id)).then(() => repository.listProjects()).then(setProjects);
+      } catch (error) {
+        console.error("Unable to import Logic Studio project.", error);
+        window.alert(error.message);
+      }
+    };
+    reader.onerror = () => window.alert("Unable to read the selected project file.");
+    reader.readAsText(file);
+  };
+
+  const openGateDefinition = (gate) => {
+    if (gate.builtIn || !gate.definition) return;
+    setEditingGateId(gate.id);
+    setName(gate.name);
+    setGateColor(gate.color);
+    setInputs(gate.definition.inputs || []);
+    setOutputs(gate.definition.outputs || []);
+    setGates(gate.definition.gates || []);
+    setWires(gate.definition.wires || []);
+    setSimulation({states: {}, unstable: false});
+    setSelectedIds([]);
+    setScreen("gate-workspace");
+  };
+
+  const openNewGate = () => {
+    setEditingGateId(null);
+    setGates([]);
+    setInputs([]);
+    setOutputs([]);
+    setWires([]);
+    setSimulation({states: {}, unstable: false});
+    setName("");
+    setScreen("gate-workspace");
+  };
+
+  const deleteGateFromMenu = (gate) => {
+    if (!window.confirm(`Delete "${gate.name}" from this project?`)) return;
+    setGateList((currentGates) => currentGates.filter((item) => item.id !== gate.id));
+  };
+
+  const duplicateProjectFromMenu = (project) => {
+    repository.duplicateProject(project).then((duplicate) => {
+      setProjects((currentProjects) => [...currentProjects, duplicate]);
+    });
+  };
+
+  const deleteProjectFromMenu = (project) => {
+    if (!window.confirm(`Delete "${project.name}" permanently?`)) return;
+    repository.deleteProject(project.id).then(() => repository.listProjects()).then(setProjects);
+  };
+
+  const openProjectFromMenu = (id) => openSavedProject(id, false);
+
+  if (!isStorageReady) {
+    return <div className="library-screen library-loading">Loading Logic Studio…</div>;
+  }
+
+  if (screen === "project-menu") {
+    return (
+      <div className="App app-library">
+        <ProjectMenu
+          projects={projects}
+          onNewProject={startNewProject}
+          onOpenProject={openProjectFromMenu}
+          onDeleteProject={deleteProjectFromMenu}
+          onDuplicateProject={duplicateProjectFromMenu}
+          onImportProject={importProject}
+        />
+      </div>
+    );
+  }
+
+  if (screen === "gate-menu") {
+    return (
+      <div className="App app-library">
+        <GateMenu
+          projectName={projectName}
+          gates={gateList.filter((gate) => !gate.builtIn)}
+          onCreateGate={openNewGate}
+          onOpenGate={openGateDefinition}
+          onDeleteGate={deleteGateFromMenu}
+          onBackToProjects={() => setScreen("project-menu")}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="App" onContextMenu={handleWireContextMenu} onMouseDown={(event) => { setPinContextMenu(null); setGateContextMenu(null); if (event.target.closest(".workspace")) beginSelection(event); }} onMouseUp={handleMouseUp}>
       <header className="App-header">
-        <TopBar openGateDialog={() => setIsGateDialogOpen(true)}/>
+        <TopBar
+          openGateDialog={() => setIsGateDialogOpen(true)}
+          projectName={projectName}
+          projects={projects}
+          onNewProject={startNewProject}
+          onSaveProject={saveCurrentProject}
+          onOpenProject={openSavedProject}
+          onRenameProject={renameProject}
+          onExportProject={exportCurrentProject}
+          onImportProject={importProject}
+          onImportFile={importProject}
+          onDuplicateProject={duplicateCurrentProject}
+          onDeleteProject={deleteCurrentProject}
+          onBackToGates={() => setScreen("gate-menu")}
+        />
         <div className="workspace" style={{display: "flex", flexDirection: "row", width: "100%", height: "80%"}}>
           <Xwrapper>
-            <InputBar inputs={inputs} setInputs={setInputs} setWires={setWires} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin} openContextMenu={openPinContextMenu} selectedIds={selectedIds}/>
-            <MainGrid draggedPinActive={draggedPinActive} setMouseOverGrid={setMouseOverGrid} x={x} y={y} gates={gates} setGateHover={setGateHover} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover} wires={wires} deleteWire={deleteWire} deleteWirePoint={deleteWirePoint} selectedIds={selectedIds} onDragStart={startGateDrag} onContextMenu={openGateContextMenu} wireDraft={wireDraft} addWirePoint={addWirePoint} addWirePointToWire={addWirePointToWire} moveWirePoint={moveWirePoint} finishWirePoint={finishWirePoint} />
-            <OutputBar outputs={outputs} setOutputs={setOutputs} setWires={setWires} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin} openContextMenu={openPinContextMenu} selectedIds={selectedIds}/>
+            <InputBar inputs={inputs} setInputs={setInputs} setWires={setWires} simulationStates={simulation.states} onToggleInput={toggleInput} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin} openContextMenu={openPinContextMenu} selectedIds={selectedIds}/>
+            <MainGrid draggedPinActive={draggedPinActive} setMouseOverGrid={setMouseOverGrid} x={x} y={y} gates={gates} simulationStates={simulation.states} setGateHover={setGateHover} handleMouseDownOnPin={handleMouseDownOnPin} setPinHover={setPinHover} wires={wires} deleteWire={deleteWire} deleteWirePoint={deleteWirePoint} selectedIds={selectedIds} onDragStart={startGateDrag} onContextMenu={openGateContextMenu} wireDraft={wireDraft} addWirePoint={addWirePoint} addWirePointToWire={addWirePointToWire} moveWirePoint={moveWirePoint} finishWirePoint={finishWirePoint} />
+            <OutputBar outputs={outputs} setOutputs={setOutputs} setWires={setWires} simulationStates={simulation.states} setPinHover={setPinHover} handleMouseDownOnPin={handleMouseDownOnPin} openContextMenu={openPinContextMenu} selectedIds={selectedIds}/>
           </Xwrapper>
         </div>
-        <BottomBar gateList={gateList} handleMouseDownOnGate={handleMouseDownOnGate}/>
+        <BottomBar gateList={gateList} handleMouseDownOnGate={handleMouseDownOnGate} openGateDefinition={openGateDefinition}/>
         <div className={`delete-zone${binHover ? " delete-zone-active" : ""}`} onMouseEnter={()=>setBinHover(true)} onMouseLeave={()=>{setBinHover(false)}} style={{position: "fixed", top: "88%", left: "88%", width: "12%", height: "12%", border: "2px solid red" , zIndex: "6"}}>
           <div className="delete-zone-icon" aria-hidden="true">⌫</div>
           <span>Delete</span>

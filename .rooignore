@@ -1,0 +1,27 @@
+# 1. Build & Release Artifacts (Compiled Code)
+build/
+release/
+static/
+
+# 2. Dependencies (Huge Noise)
+node_modules/
+
+# 3. Media & Static Assets
+public/
+*.png
+*.ico
+*.svg
+*.jpg
+*.jpeg
+
+# 4. Large Manifests & Auto-Generated Files
+package-lock.json
+asset-manifest.json
+manifest.json
+robots.txt
+
+# 5. Git & System Metadata
+.git/
+.gitattributes
+.gitignore
+.rooignore
